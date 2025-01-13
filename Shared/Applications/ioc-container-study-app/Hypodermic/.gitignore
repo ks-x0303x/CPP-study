@@ -1,0 +1,13 @@
+*.ipch
+*.opensdf
+*.sdf
+*.suo
+*.vcxproj.user
+bin/**
+build/**
+lib/**
+ipch/**
+obj/**
+*ReSharper*
+*.VC.*
+.vs/*
