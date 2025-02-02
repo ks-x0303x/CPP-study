@@ -1,2 +1,4 @@
 *.gz
 *.tar
+build
+*.DS_Store
