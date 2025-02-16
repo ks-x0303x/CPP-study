@@ -4,17 +4,17 @@ services:
     build: .
     ports:
       - "2222:22"
-    networks:
-      my_network:
-        ipv4_address: 172.18.0.23
+    # networks:
+    #   my_network:
+    #     ipv4_address: 172.18.0.23
     volumes:
       - ./Shared:/home/ubuntu/Shared
     tty: true
     stdin_open: true
 
-networks:
-  my_network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.18.0.0/16
+# networks:
+#   my_network:
+#     driver: bridge
+#     ipam:
+#       config:
+#         - subnet: 172.18.0.0/16
