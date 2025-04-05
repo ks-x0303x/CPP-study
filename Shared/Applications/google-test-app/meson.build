@@ -1,20 +1,33 @@
 # meson.build
-project('Hydoromic lib', 'cpp',
+project('gtest-sample lib', 'cpp',
   default_options : 
   [
     'warning_level=3',
     'cpp_std=c++11'
   ])
 
-subdir('Hypodermic')
-# Hypodermic-dep = dependency('Hypodermic')
 
-# main.c をビルド
-executable(
-  'main',                                                   # 実行ファイル名
-  'main.cpp',                                               # ソースファイル
-  dependencies: declare_dependency(
-    include_directories: include_directories('Hypodermic')  # ヘッダーファイルを参照 プロジェクトのディレクトリ直下を参照する場合
-    # dependencies: Hypodermic-dep                          # /usr/local/include/Hydoromic がインストールされている場合はこの書き方でも良い
-  )
+# gtest と gmock のライブラリをコンパイラで検索
+gtest_dep = dependency('gtest')
+gmock_dep = dependency('gmock')
+
+# gtest と gmock のヘッダーファイルを指定
+gtest_include = include_directories('/usr/include')
+gmock_include = include_directories('/usr/include')
+
+# ヘッダーのディレクトリをまとめて配列に追加
+include_dirs = [gtest_include, gmock_include]
+
+src = 'main.cpp'
+
+# テストターゲットを作成
+executable('test_runner',
+    src,  # テストコードのエントリポイント
+    include_directories: include_dirs,  # ヘッダーファイルのディレクトリを配列で指定
+    dependencies: [gtest_dep, gmock_dep],  # 外部ライブラリを依存関係として指定
+    cpp_args: ['-pthread']
 )
+
+# テスト実行設定
+#test('unittests', executable('test_runner'))
+

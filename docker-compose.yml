@@ -1,5 +1,6 @@
 services:
-  ubuntu-ssh:
+  #ubuntu-ssh:
+  ubuntu-env:
     platform: linux/arm64 #https://hub.docker.com/r/arm64v8/ubuntu/
     build: .
     ports:
@@ -11,6 +12,7 @@ services:
       - ./Shared:/home/ubuntu/Shared
     tty: true
     stdin_open: true
+    command: /bin/bash
 
 # networks:
 #   my_network:

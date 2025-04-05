@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y \
     rpm \
     rpm2cpio \
     cpio \
+    pkg-config \
     ninja-build && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
