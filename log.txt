@@ -1,0 +1,50 @@
+Sending build context to Docker daemon    257MB
+Step 1/16 : FROM ubuntu:22.04
+ ---> 981912c48e9a
+Step 2/16 : COPY ./Shared /home/ubuntu/Shared
+ ---> Using cache
+ ---> 1deab493e20b
+Step 3/16 : RUN apt-get update && apt-get install -y     openssh-server     sudo     vim     build-essential     gcc     g++     gdb-multiarch     cmake     python3     python3-pip     wget     curl     git     meson     rpm     rpm2cpio     cpio     ninja-build &&     apt-get clean &&     rm -rf /var/lib/apt/lists/*
+ ---> Using cache
+ ---> 7d962a746729
+Step 4/16 : RUN cd /home/ubuntu/Shared/external &&     tar -xvzf boost_1_74_0.tar.gz &&     cd boost_1_74_0 &&     ./bootstrap.sh &&     ./b2 install &&     cd .. &&     rm -rf boost_1_74_0 boost_1_74_0.tar.gz
+ ---> Using cache
+ ---> 2610c70e2140
+Step 5/16 : ENV GO_VERSION=1.20.5
+ ---> Using cache
+ ---> 673e02960ecc
+Step 6/16 : RUN wget https://go.dev/dl/go$GO_VERSION.linux-arm64.tar.gz &&     tar -C /usr/local -xzf go$GO_VERSION.linux-arm64.tar.gz &&     rm go$GO_VERSION.linux-arm64.tar.gz
+ ---> Using cache
+ ---> 4b141444c487
+Step 7/16 : ENV GOROOT=/usr/local/go
+ ---> Using cache
+ ---> 65d7fb97a25e
+Step 8/16 : ENV GOPATH=/root/go
+ ---> Using cache
+ ---> d388f866bfe5
+Step 9/16 : ENV PATH=$PATH:$GOROOT/bin:$GOPATH/bin
+ ---> Using cache
+ ---> 4352aafa9417
+Step 10/16 : RUN mkdir /var/run/sshd
+ ---> Using cache
+ ---> 99a96f90c0c6
+Step 11/16 : RUN echo 'root:rootpassword' | chpasswd
+ ---> Using cache
+ ---> f7c9fa56173f
+Step 12/16 : RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+ ---> Using cache
+ ---> 4860a179cd01
+Step 13/16 : RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+ ---> Using cache
+ ---> bf838c5d5429
+Step 14/16 : RUN echo "root ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+ ---> Using cache
+ ---> 6c4de19f69ef
+Step 15/16 : EXPOSE 22
+ ---> Using cache
+ ---> 5cb9609fec99
+Step 16/16 : CMD ["/usr/sbin/sshd", "-D"]
+ ---> Using cache
+ ---> dadf9fde7a45
+Successfully built dadf9fde7a45
+Successfully tagged cpp-study_ubuntu-ssh:latest

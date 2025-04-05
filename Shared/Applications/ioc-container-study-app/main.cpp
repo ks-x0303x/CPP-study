@@ -1,4 +1,6 @@
 #include <iostream>
+#include <string>
+#include <boost/utility/string_view.hpp>
 #include <Hypodermic/ContainerBuilder.h>
 
 class IService
@@ -91,6 +93,46 @@ void HypodermicExample()
     service2->excute();
 }
 
+
+class Info
+{
+    public:
+    Info(const std::string name)
+    : name_(name)
+    {
+
+    }
+
+    boost::string_view getName(){return name_;}
+
+    private:
+    const std::string& name_;
+};
+
+class Model
+{
+    public:
+    Info GetInfo()
+    {
+        auto text = "hoge";
+        auto info = Info(text);
+        std::cout << info.getName() << std::endl;
+        return Info(text);
+    }
+
+};
+
+class Controller
+{
+    public:
+    void Process()
+    {
+        auto model = Model();
+        auto info = model.GetInfo();
+        std::cout << info.getName() << std::endl;
+    }
+};
+
 void SharedPtrExample()
 {
     std::cout << "// 観点： 通常のshared_ptrの生成直後の参照カウント" << std::endl;
@@ -150,7 +192,8 @@ int main() {
     SharedPtrExample();
     std::cout << "SharedPtrExample-----------<" << std::endl;
 
-
+    auto controller = Controller();
+    controller.Process();
     // 必要ならヘッダーファイル内の関数や定義を使用
     return 0;
 }
