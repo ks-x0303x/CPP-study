@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdexcept>
 #include "ICalculator.hpp"
 
 class Calculator : public ICalculator {
