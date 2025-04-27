@@ -1,0 +1,1 @@
+option('Is_Gtest', type: 'boolean', value: false, description: 'Enable a gtest')
