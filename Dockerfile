@@ -1,6 +1,7 @@
 # ベースイメージにUbuntuを使用 (ARM64対応)
 FROM ubuntu:22.04
 
+ENV HOME=/home/ubuntu
 COPY ./Shared /home/ubuntu/Shared
 
 # 必要なパッケージのインストール
@@ -60,6 +61,8 @@ RUN echo "root ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # SSHデーモン起動用のポートを開放
 EXPOSE 22
+
+WORKDIR /home/ubuntu/Shared
 
 # コンテナ起動時にSSHサービスを開始する
 CMD ["/usr/sbin/sshd", "-D"]
