@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
 
 # Boost 1.74のインストール
 RUN cd /home/ubuntu/Shared/external && \
+    wget https://archives.boost.io/release/1.74.0/source/boost_1_74_0.tar.gz && \
     tar -xvzf boost_1_74_0.tar.gz && \
     cd boost_1_74_0 && \
     ./bootstrap.sh && \
