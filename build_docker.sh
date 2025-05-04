@@ -1,0 +1,1 @@
+docker build -t ubuntu-env --platform linux/arm64 -f Dockerfile .

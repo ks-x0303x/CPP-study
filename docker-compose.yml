@@ -2,7 +2,7 @@ services:
   #ubuntu-ssh:
   ubuntu-env:
     platform: linux/arm64 #https://hub.docker.com/r/arm64v8/ubuntu/
-    build: .
+    image: ksx0303x/ubuntu-env:latest
     ports:
       - "2222:22"
     # networks:
