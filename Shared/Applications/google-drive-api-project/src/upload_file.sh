@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Get the absolute directory of the current script
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
 function show_help() {
     echo "Usage: $0 <file_path> <target_directory>"
     echo
@@ -39,4 +42,4 @@ if [ ! -f "$FILE_PATH" ]; then
 fi
 
 # Execute the Python script with the provided arguments
-python3 .src/google_drive_driver.py upload -f "$FILE_PATH" -t "$TARGET_DIR"
+python3 "$SCRIPT_DIR/google_drive_driver.py" upload -f "$FILE_PATH" -t "$TARGET_DIR"

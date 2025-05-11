@@ -2,6 +2,9 @@
 
 # filepath: download_file.sh
 
+# Get the absolute directory of the current script
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
 # Display help message
 function show_help() {
     echo "Usage: $0 <src_file_path_or_id> <output_path>"
@@ -36,4 +39,4 @@ SRC_FILE_PATH_OR_ID=$1
 OUTPUT_PATH=$2
 
 # Execute the Python script with the provided arguments
-python3 google_drive_driver.py download -f "$SRC_FILE_PATH_OR_ID" -o "$OUTPUT_PATH"
+python3 "$SCRIPT_DIR/google_drive_driver.py" download -f "$SRC_FILE_PATH_OR_ID" -o "$OUTPUT_PATH"
