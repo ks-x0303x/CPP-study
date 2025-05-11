@@ -2,7 +2,9 @@
 FROM ubuntu:22.04
 
 ENV HOME=/home/ubuntu
+WORKDIR /home/ubuntu/Shared
 COPY ./Shared /home/ubuntu/Shared
+COPY ./requirements.txt /home/ubuntu/requirements.txt
 
 # 必要なパッケージのインストール
 RUN apt-get update && apt-get install -y \
@@ -49,6 +51,9 @@ ENV GOROOT=/usr/local/go
 ENV GOPATH=/root/go
 ENV PATH=$PATH:$GOROOT/bin:$GOPATH/bin
 
+# PIP install
+RUN pip install -r /home/ubuntu/requirements.txt -q --no-warn-script-location
+
 # SSHの設定
 RUN mkdir /var/run/sshd
 RUN echo 'root:rootpassword' | chpasswd
@@ -62,8 +67,6 @@ RUN echo "root ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # SSHデーモン起動用のポートを開放
 EXPOSE 22
-
-WORKDIR /home/ubuntu/Shared
 
 # コンテナ起動時にSSHサービスを開始する
 CMD ["/usr/sbin/sshd", "-D"]

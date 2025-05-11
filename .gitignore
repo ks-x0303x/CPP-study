@@ -2,3 +2,5 @@
 *.tar
 build
 *.DS_Store
+*settings.yaml
+*credentials.json
