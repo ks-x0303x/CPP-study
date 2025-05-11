@@ -11,6 +11,7 @@ services:
     #     ipv4_address: 172.18.0.23
     volumes:
       - ./Shared:/home/ubuntu/Shared
+      - ./config:/usr/local/config
     tty: true
     stdin_open: true
     command: /bin/bash

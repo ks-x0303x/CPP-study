@@ -142,7 +142,6 @@ def downloadFile(drive, src_file_path, output_path):
     """
     # Resolve the output path to an absolute path
     resolved_output_path = resolvePath(output_path)
-
     # Check if the resolved path is a directory
     if os.path.isdir(resolved_output_path):
         # Extract the file name from src_file_path and append it to the directory
@@ -168,10 +167,26 @@ def authenticate():
     Authenticate the user and return the Google Drive service.
     """
     try:
-        gauth = GoogleAuth()
-        gauth.CommandLineAuth()
-        drive = GoogleDrive(gauth)
-        return drive
+
+        config_dir = "/usr/local/config"  # コンテナ内のマウント先ディレクトリ
+        credentials_path = os.path.join(config_dir, "credentials.json")
+        settings_path = os.path.join(config_dir, "settings.yaml")
+
+        gauth = GoogleAuth(settings_path)
+        print (f"Using settings file: {settings_path}")
+        gauth.LoadCredentialsFile(credentials_path)
+        if gauth.credentials is None:
+            print("No credentials found. Please authenticate.")
+            gauth.CommandLineAuth()
+            gauth.SaveCredentialsFile(credentials_path)
+        elif gauth.access_token_expired:
+            print("Access token expired. Refreshing...")
+            gauth.Refresh()
+        else:
+            print("Using existing credentials.")
+            gauth.CommandLineAuth()
+
+        return GoogleDrive(gauth)
     except Exception as e:
         print("Authentication failed. Please contact the following email address to obtain the token: seiya_1998@icloud.com")
         print(f"Error details: {e}")
