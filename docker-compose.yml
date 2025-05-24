@@ -4,12 +4,14 @@ services:
     platform: linux/arm64 #https://hub.docker.com/r/arm64v8/ubuntu/
     image: ksx0303x/ubuntu-env:latest
     ports:
-      - "2222:22"
+    # - "2222:22"
+      - "8080:80"
     # networks:
     #   my_network:
     #     ipv4_address: 172.18.0.23
     volumes:
       - ./Shared:/home/ubuntu/Shared
+      - ./config:/usr/local/config
     tty: true
     stdin_open: true
     command: /bin/bash
