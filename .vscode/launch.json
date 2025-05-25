@@ -1,0 +1,80 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "C++ Remote Debug (Attach)",
+      "type": "cppdbg",
+      "request": "attach",
+      "processId": "${input:processId}", 
+      "program": "${workspaceFolder}/Shared/Applications/${input:applicationType}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/opt/homebrew/bin/gdb",
+      "miDebuggerServerAddress": "127.0.0.1:10000",
+      "useExtendedRemote": true, // リモートデバッグでプロセスIDを使用するために必要
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        },
+        {
+            "description": "Replace absolute path of source code",
+            "text": "set substitute-path /home/ubuntu/Shared ${workspaceFolder}/Shared",
+            "ignoreFailures": false
+        }
+      ],
+      //"preLaunchTask": "build",
+      "filterStderr": false,
+      "filterStdout": false,
+    // "sourceFileMap": { // リモートデバッグで効かない
+    //     "/home/ubuntu/Shared": "${workspaceFolder}/Shared"
+    // }
+    },
+    {
+      "name" : "C++ Remote Debug (Launch)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/Shared/Applications/${input:applicationType}",
+      "args": [],
+      "stopAtEntry": true,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "miDebuggerPath": "/opt/homebrew/bin/gdb",
+      "miDebuggerServerAddress": "127.0.0.1:10000",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        },
+        {
+            "description": "Replace absolute path of source code",
+            "text": "set substitute-path /home/ubuntu/Shared ${workspaceFolder}/Shared",
+            "ignoreFailures": false
+        }
+      ],
+    }
+  ],
+  "inputs": [
+    {
+      "id": "processId",
+      "type": "promptString", // テキストボックスを表示
+      "description": "Enter the process ID to attach to",
+      "default": ""
+    },
+    {
+      "id": "applicationType",
+      "type": "pickString",
+      "description": "Select the application type",
+      "options": [
+        "boost-study-app/build/boost_example",
+        "google-test-app/build/sample_app",
+        "google-test-app/build/test_runner",
+        "ioc-container-study-app/build/main",
+      ],
+      "default": ""
+    }
+  ]
+}

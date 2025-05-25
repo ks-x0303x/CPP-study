@@ -3,7 +3,8 @@ project('gtest-sample lib', 'cpp',
   default_options : 
   [
     'warning_level=3',
-    'cpp_std=c++17'
+    'cpp_std=c++17',
+    'debug=true'
   ])
 
 # オプション定義

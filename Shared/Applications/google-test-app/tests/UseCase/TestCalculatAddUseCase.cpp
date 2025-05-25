@@ -13,7 +13,7 @@ using ::testing::_;
 
 TEST(CalculatAddUseCaseTest, Execute) {
     // Mockオブジェクトを作成
-    auto mockCalculator = std::shared_ptr<MockCalculator>();
+    auto mockCalculator = std::make_shared<MockCalculator>();
     
 
     // 期待される動作を定義
