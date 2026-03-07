@@ -36,5 +36,6 @@ if [ ! -f "$COMPOSE_FILE" ]; then
 fi
 
 # Docker Compose を起動
-docker-compose -f "$COMPOSE_FILE" up -d
-docker exec -it cpp-study-ubuntu-env-1 /bin/bash
+docker-compose -f "$COMPOSE_FILE" run --rm --service-ports ubuntu-env bash
+# docker exec -it cpp-study-ubuntu-env-1 /bin/bash
+# docker compose run --rm --service-ports ubuntu-env bash

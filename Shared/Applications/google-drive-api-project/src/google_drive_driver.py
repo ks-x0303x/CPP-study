@@ -1,227 +1,344 @@
 import argparse
-import os
-import sys
-from pydrive2.auth import GoogleAuth
-from pydrive2.drive import GoogleDrive
+import fnmatch
+import glob
+import re
+from pathlib import Path
 
-def getFileId(drive, file_path):
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+
+
+# quickstart.py とスコープを揃える（アップロード/ダウンロード用途）
+SCOPES = ["https://www.googleapis.com/auth/drive"]
+
+_FILE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{20,}$")
+_GLOB_META_CHARS = set("*?[")
+
+
+def _get_config_dir() -> Path:
+    """Locate config directory.
+
+    Prefer `/usr/local/config` only when it actually contains `token.json`.
+    This avoids surprising failures when the directory exists but the config
+    files live next to the scripts.
     """
-    Get the ID of a file in Google Drive by its path.
 
-    :param drive: Google Drive service instance.
-    :param file_path: Path to the file in Google Drive (e.g., 'Parent/Child/File.txt').
-    :return: The ID of the file if found, otherwise None.
-    """
-    folder_names = file_path.split('/')  # Split the path into parts
-    parent_id = 'root'  # Start from the root folder
+    container_dir = Path("/usr/local/config")
+    if container_dir.is_dir() and (container_dir / "token.json").exists():
+        return container_dir
+    return Path(__file__).resolve().parent
 
-    for folder_name in folder_names[:-1]:  # Traverse all folders except the last part
-        query = f"'{parent_id}' in parents and title='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
-        folder_list = drive.ListFile({'q': query}).GetList()
 
-        if not folder_list:
-            print(f"Error: Folder '{folder_name}' not found in path '{file_path}'.")
-            return None
-        parent_id = folder_list[0]['id']  # Move to the next folder in the path
+def _load_credentials(config_dir: Path) -> Credentials:
+    token_path = config_dir / "token.json"
+    if not token_path.exists():
+        raise FileNotFoundError(
+            "token.json が見つかりません。\n"
+            f"期待パス: {token_path}\n"
+            "先に quickstart.py を実行して token.json を生成してください。"
+        )
 
-    # Search for the file in the final folder
-    file_name = folder_names[-1]
-    query = f"'{parent_id}' in parents and title='{file_name}' and trashed=false"
-    file_list = drive.ListFile({'q': query}).GetList()
+    creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+        token_path.write_text(creds.to_json(), encoding="utf-8")
+    return creds
 
-    if not file_list:
-        print(f"Error: File '{file_name}' not found in path '{file_path}'.")
-        return None
 
-    return file_list[0]['id']  # Return the ID of the file
+def _service():
+    config_dir = _get_config_dir()
+    creds = _load_credentials(config_dir)
+    return build("drive", "v3", credentials=creds)
 
-def getFolderId(drive, folder_path):
-    """
-    Recursively search for a folder in Google Drive by its path.
 
-    :param drive: Google Drive service instance.
-    :param folder_path: Path to the folder (e.g., 'Parent/Child').
-    :return: The ID of the folder if found, otherwise None.
-    """
-    folder_names = folder_path.split('/')  # Split the path into parts
-    parent_id = 'root'  # Start from the root folder
+def _escape_query_value(value: str) -> str:
+    # Drive query uses single quotes; escape backslash first.
+    return value.replace("\\", "\\\\").replace("'", "\\'")
 
-    for folder_name in folder_names:
-        query = f"'{parent_id}' in parents and title='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
-        folder_list = drive.ListFile({'q': query}).GetList()
 
-        if not folder_list:
-            print(f"Folder '{folder_name}' not found in path '{folder_path}'.")
-            return None  # Folder not found
-        parent_id = folder_list[0]['id']  # Move to the next folder in the path
+def _has_glob_magic(value: str) -> bool:
+    return any(ch in value for ch in _GLOB_META_CHARS)
 
-    return parent_id  # Return the ID of the last folder in the path
 
-def createFolder(drive, folder_path):
-    """
-    Recursively create folders in Google Drive based on the given path.
+def _looks_like_file_id(value: str) -> bool:
+    return bool(_FILE_ID_RE.match(value))
 
-    :param drive: Google Drive service instance.
-    :param folder_path: Path to the folder (e.g., 'Test/hoge/huga').
-    :return: The ID of the last folder in the path.
-    """
-    folder_list = folder_path.split('/')  # Split the path into parts
-    parent_id = 'root'  # Start from the root folder
-    current_path = ''  # To build the folder path incrementally
 
-    for folder_name in folder_list:
-        # Build the current folder path
-        current_path = f"{current_path}/{folder_name}" if current_path else folder_name
+def _find_files_in_root_by_name(service, name: str):
+    q = " and ".join(
+        [
+            "'root' in parents",
+            "trashed=false",
+            f"name='{_escape_query_value(name)}'",
+        ]
+    )
+    resp = service.files().list(q=q, fields="files(id,name,mimeType,modifiedTime,size)").execute()
+    return resp.get("files", [])
 
-        # Check if the folder exists
-        folder_id = getFolderId(drive, current_path)
-        if folder_id is None:
-            # Folder does not exist, create it
-            folder_metadata = {
-                'title': folder_name,
-                'mimeType': 'application/vnd.google-apps.folder',
-                'parents': [{'id': parent_id}]
+
+def _find_child(service, parent_id: str, name: str, mime_type: str | None):
+    q_parts = [
+        f"'{parent_id}' in parents",
+        "trashed=false",
+        f"name='{_escape_query_value(name)}'",
+    ]
+    if mime_type is not None:
+        q_parts.append(f"mimeType='{mime_type}'")
+
+    resp = service.files().list(q=" and ".join(q_parts), fields="files(id,name,mimeType)").execute()
+    files = resp.get("files", [])
+    return files[0] if files else None
+
+
+def _list_children(service, parent_id: str, name_contains: str | None):
+    q_parts = [f"'{parent_id}' in parents", "trashed=false"]
+    if name_contains:
+        q_parts.append(f"name contains '{_escape_query_value(name_contains)}'")
+
+    files: list[dict] = []
+    page_token = None
+    while True:
+        resp = (
+            service.files()
+            .list(
+                q=" and ".join(q_parts),
+                fields="nextPageToken, files(id,name,mimeType,modifiedTime,size)",
+                pageSize=1000,
+                pageToken=page_token,
+            )
+            .execute()
+        )
+        files.extend(resp.get("files", []))
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return files
+
+
+def _resolve_folder_id(service, folder_path: str, create: bool) -> str:
+    folder_path = folder_path.strip("/")
+    if folder_path == "":
+        return "root"
+
+    parent_id = "root"
+    for part in [p for p in folder_path.split("/") if p]:
+        folder = _find_child(service, parent_id, part, "application/vnd.google-apps.folder")
+        if not folder:
+            if not create:
+                raise FileNotFoundError(f"Folder not found: {folder_path}")
+            meta = {
+                "name": part,
+                "mimeType": "application/vnd.google-apps.folder",
+                "parents": [parent_id],
             }
-            folder = drive.CreateFile(folder_metadata)
-            folder.Upload()
-            print(f"Created folder: {current_path}")
-            parent_id = folder['id']  # Update parent_id to the newly created folder
-        else:
-            # Folder exists, update parent_id to the existing folder's ID
-            parent_id = folder_id
+            folder = service.files().create(body=meta, fields="id").execute()
+        parent_id = folder["id"]
+    return parent_id
 
-    return parent_id  # Return the ID of the last folder in the path
 
-def uploadFile(drive, file_path, folder_name):
+def _resolve_file_id(service, file_path_or_id: str) -> str:
+    # "a/b/c.txt" のような Drive パスを優先的に扱う。
+    # "/" が無い場合は、まず「IDっぽいか」を判定し、IDっぽくなければ root 直下のファイル名解決を試す。
+    if "/" not in file_path_or_id:
+        if _looks_like_file_id(file_path_or_id):
+            return file_path_or_id
+
+        candidates = _find_files_in_root_by_name(service, file_path_or_id)
+        # フォルダは download できないので除外
+        candidates = [c for c in candidates if c.get("mimeType") != "application/vnd.google-apps.folder"]
+        if len(candidates) == 1:
+            return candidates[0]["id"]
+        if len(candidates) > 1:
+            shown = "\n".join(
+                [
+                    f"- {c.get('name')} (id={c.get('id')}, modifiedTime={c.get('modifiedTime')})"
+                    for c in candidates[:10]
+                ]
+            )
+            raise ValueError(
+                "Multiple files matched in Drive root. Specify a Drive path (Folder/file) or an explicit file ID.\n"
+                f"name={file_path_or_id}\n{shown}"
+            )
+
+        raise FileNotFoundError(
+            "File not found in Drive root. Specify a Drive path like 'Folder/file.txt' or use the file ID.\n"
+            f"name={file_path_or_id}"
+        )
+
+    drive_path = file_path_or_id.strip("/")
+    parts = [p for p in drive_path.split("/") if p]
+    if not parts:
+        raise ValueError("Invalid file path")
+
+    file_name = parts[-1]
+    folder_path = "/".join(parts[:-1])
+    parent_id = _resolve_folder_id(service, folder_path, create=False)
+
+    f = _find_child(service, parent_id, file_name, None)
+    if not f:
+        raise FileNotFoundError(f"File not found: {file_path_or_id}")
+    if f.get("mimeType") == "application/vnd.google-apps.folder":
+        raise IsADirectoryError(f"Path refers to a folder (cannot download a folder): {file_path_or_id}")
+    return f["id"]
+
+
+def _resolve_output_path(src_file_path_or_id: str, output_path: str) -> Path:
+    out = Path(output_path).expanduser().resolve()
+    if out.is_dir():
+        out = out / Path(src_file_path_or_id).name
+    out.parent.mkdir(parents=True, exist_ok=True)
+    return out
+
+
+def _download_one(service, file_id: str, out: Path) -> None:
+    req = service.files().get_media(fileId=file_id)
+    with open(out, "wb") as fh:
+        downloader = MediaIoBaseDownload(fh, req)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+
+
+def _download_many(service, items: list[dict], output_path: str) -> None:
+    out_base = Path(output_path).expanduser().resolve()
+    if out_base.exists() and out_base.is_file():
+        raise ValueError(
+            "Output path must be a directory when downloading multiple files. "
+            f"output={out_base}"
+        )
+    out_base.mkdir(parents=True, exist_ok=True)
+
+    for item in items:
+        name = item.get("name") or item.get("id")
+        out = out_base / name
+        _download_one(service, item["id"], out)
+        print(f"Downloaded: {name} ({item['id']}) -> {out}")
+
+
+def _resolve_drive_glob(service, drive_path_glob: str) -> list[dict]:
+    """Resolve Drive-side glob for file names.
+
+    Supports glob only in the last path component (file name), e.g.:
+    - test.*
+    - Folder/*.txt
     """
-    Upload a file to a specified folder in Google Drive.
-    
-    :param drive: Google Drive service instance.
-    :param file_path: Path to the file to upload.
-    :param folder_name: Name of the folder to upload the file to.
-    """
-    if not os.path.exists(file_path):
-        print(f"Error: The file '{file_path}' does not exist.")
-        exit(1)
 
-    if folder_name != '':
-        folder_id = getFolderId(drive, folder_name)
-        if not folder_id:
-            folder_id = createFolder(drive, folder_name)
+    drive_path_glob = drive_path_glob.strip("/")
+    if drive_path_glob == "":
+        raise ValueError("Invalid file path")
 
-    file_metadata = {
-        'title': file_path.split('/')[-1],
-        'parents': [{'id': folder_id}]
-    }
-    file_drive = drive.CreateFile(file_metadata)
-    file_drive.SetContentFile(file_path)
-    file_drive.Upload()
-    print(f'Uploaded {file_path} to {folder_name}')
-
-def resolvePath(input_path):
-    """
-    Resolve the given path to an absolute path.
-
-    :param input_path: The input path (can be relative or absolute).
-    :return: The absolute path.
-    """
-    if os.path.isabs(input_path):
-        # If the path is already absolute, return it as is
-        return input_path
+    if "/" in drive_path_glob:
+        folder_path, name_glob = drive_path_glob.rsplit("/", 1)
+        if _has_glob_magic(folder_path):
+            raise ValueError("Wildcards in folder path are not supported.")
+        parent_id = _resolve_folder_id(service, folder_path, create=False)
     else:
-        # If the path is relative, join it with the current working directory
-        return os.path.abspath(os.path.join(os.getcwd(), input_path))
+        name_glob = drive_path_glob
+        parent_id = "root"
 
-def downloadFile(drive, src_file_path, output_path):
-    """
-    Download a file from Google Drive.
+    prefix = ""
+    for ch in name_glob:
+        if ch in _GLOB_META_CHARS:
+            break
+        prefix += ch
 
-    :param drive: Google Drive service instance.
-    :param src_file_path: Path or ID of the file to download.
-    :param output_path: Path to save the downloaded file (can be relative or absolute).
-    """
-    # Resolve the output path to an absolute path
-    resolved_output_path = resolvePath(output_path)
-    # Check if the resolved path is a directory
-    if os.path.isdir(resolved_output_path):
-        # Extract the file name from src_file_path and append it to the directory
-        file_name = os.path.basename(src_file_path)
-        resolved_output_path = os.path.join(resolved_output_path, file_name)
+    candidates = _list_children(service, parent_id, prefix or None)
 
-    # Get the file ID using getFileId()
-    file_id = getFileId(drive, src_file_path)
-    if file_id is None:
-        print(f"Error: The file '{src_file_path}' does not exist in Google Drive.")
-        exit(1)
+    matched = [c for c in candidates if fnmatch.fnmatchcase(c.get("name", ""), name_glob)]
+    # フォルダは download できないので除外
+    matched = [m for m in matched if m.get("mimeType") != "application/vnd.google-apps.folder"]
 
+    return matched
+
+
+def download_file(src_file_path_or_id: str, output_path: str) -> None:
+    service = _service()
     try:
-        file_drive = drive.CreateFile({'id': file_id})
-        file_drive.GetContentFile(resolved_output_path)
-        print(f"Downloaded file to {resolved_output_path}")
-    except Exception as e:
-        print(f"Error downloading file: {e}")
-        exit(1)
+        if _has_glob_magic(src_file_path_or_id):
+            items = _resolve_drive_glob(service, src_file_path_or_id)
+            if not items:
+                raise FileNotFoundError(f"No files matched: {src_file_path_or_id}")
+            if len(items) == 1:
+                name = items[0].get("name") or src_file_path_or_id
+                out = _resolve_output_path(name, output_path)
+                _download_one(service, items[0]["id"], out)
+                print(f"Downloaded: {name} ({items[0]['id']}) -> {out}")
+                return
 
-def authenticate():
-    """
-    Authenticate the user and return the Google Drive service.
-    """
-    try:
+            _download_many(service, items, output_path)
+            return
 
-        config_dir = "/usr/local/config"  # コンテナ内のマウント先ディレクトリ
-        credentials_path = os.path.join(config_dir, "credentials.json")
-        settings_path = os.path.join(config_dir, "settings.yaml")
+        file_id = _resolve_file_id(service, src_file_path_or_id)
+        out = _resolve_output_path(src_file_path_or_id, output_path)
+        _download_one(service, file_id, out)
+    except Exception as exc:
+        # fileId として失敗した場合に、ありがちな誤用（ファイル名を渡した）をガイドする
+        if (
+            hasattr(exc, "resp")
+            and getattr(getattr(exc, "resp", None), "status", None) == 404
+            and "/" not in src_file_path_or_id
+            and not _looks_like_file_id(src_file_path_or_id)
+        ):
+            raise FileNotFoundError(
+                "File not found. If you passed a file name, specify a Drive path like 'Folder/test.txt' or use the file ID.\n"
+                f"input={src_file_path_or_id}"
+            ) from exc
+        raise
 
-        gauth = GoogleAuth(settings_path)
-        print (f"Using settings file: {settings_path}")
-        gauth.LoadCredentialsFile(credentials_path)
-        if gauth.credentials is None:
-            print("No credentials found. Please authenticate.")
-            gauth.CommandLineAuth()
-            gauth.SaveCredentialsFile(credentials_path)
-        elif gauth.access_token_expired:
-            print("Access token expired. Refreshing...")
-            gauth.Refresh()
-        else:
-            print("Using existing credentials.")
-            gauth.CommandLineAuth()
+    print(f"Downloaded: {src_file_path_or_id} -> {out}")
 
-        return GoogleDrive(gauth)
-    except Exception as e:
-        print("Authentication failed. Please contact the following email address to obtain the token: seiya_1998@icloud.com")
-        print(f"Error details: {e}")
-        exit(1)
+
+def upload_file(local_file_path: str, target_folder: str) -> None:
+    service = _service()
+    parent_id = _resolve_folder_id(service, target_folder, create=True)
+
+    def upload_one(local: Path) -> None:
+        media = MediaFileUpload(str(local), resumable=True)
+        meta = {"name": local.name, "parents": [parent_id]}
+        created = service.files().create(body=meta, media_body=media, fields="id").execute()
+        print(f"Uploaded: {local} -> {target_folder} (id={created['id']})")
+
+    if _has_glob_magic(local_file_path):
+        pattern = str(Path(local_file_path).expanduser())
+        matches = [Path(p) for p in glob.glob(pattern)]
+        matches = [p for p in matches if p.is_file()]
+        if not matches:
+            raise FileNotFoundError(f"Local files not found (glob): {pattern}")
+        for p in sorted({m.resolve() for m in matches}):
+            upload_one(p)
+        return
+
+    local = Path(local_file_path).expanduser().resolve()
+    if not local.exists():
+        raise FileNotFoundError(f"Local file not found: {local}")
+    if not local.is_file():
+        raise FileNotFoundError(f"Local file not found: {local}")
+    upload_one(local)
+
 
 def main():
-    """
-    Main function to authenticate and upload a file to Google Drive.
-    """
     parser = argparse.ArgumentParser(description="Upload or download files to/from Google Drive.")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # Upload command
     upload_parser = subparsers.add_parser("upload", help="Upload a file to Google Drive")
     upload_parser.add_argument("-f", "--file", required=True, help="Path to the file to upload")
-    upload_parser.add_argument("-t", "--target", required=True, help="Target folder name on Google Drive")
+    upload_parser.add_argument("-t", "--target", required=True, help="Target folder path on Google Drive")
 
-    # Download command
     download_parser = subparsers.add_parser("download", help="Download a file from Google Drive")
-    download_parser.add_argument("-f", "--file", required=True, help="Path to the file on Google Drive")
+    download_parser.add_argument("-f", "--file", required=True, help="Path or ID of the file on Google Drive")
     download_parser.add_argument("-o", "--output", required=True, help="Output path to save the downloaded file")
 
     args = parser.parse_args()
-
-    drive = authenticate()
     if args.command == "upload":
-        uploadFile(drive, args.file, args.target)
-        print('File uploaded successfully.')
+        upload_file(args.file, args.target)
     elif args.command == "download":
-        downloadFile(drive, args.file, args.output)
-        print('File downloaded successfully.')
+        download_file(args.file, args.output)
     else:
         parser.print_help()
-        exit(1)
-    
+        raise SystemExit(1)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

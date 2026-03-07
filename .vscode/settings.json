@@ -67,5 +67,19 @@
         "typeindex": "cpp",
         "typeinfo": "cpp",
         "variant": "cpp"
+    },
+    "chat.includeApplyingInstructions": true,
+    "chat.includeReferencedInstructions": true,
+    "files.exclude": {
+        "**/*.log": true,
+        "**/log.txt": true
+    },
+    "search.exclude": {
+        "**/token.json": true,
+        "**/token*.json": true,
+        "**/*.log": true,
+        "**/log.txt": true,
+        "**/credentials.json": true,
+        "**/*credentials.json": true
     }
 }
