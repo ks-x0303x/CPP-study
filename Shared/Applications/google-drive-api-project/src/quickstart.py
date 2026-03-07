@@ -74,16 +74,28 @@ def _receive_auth_code(bind_host: str, bind_port: int):
 
       if "error" in qs:
         result["error"] = qs.get("error", [""])[0]
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"Authorization failed. You may close this tab.")
+        done.set()
+        return
+
       if "code" in qs:
         result["code"] = qs.get("code", [""])[0]
         result["path"] = self.path
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"Authorization finished. You may close this tab.")
+        done.set()
+        return
 
+      # code/error が無いリクエスト（favicon など）は無視して待ち続ける
       self.send_response(200)
       self.send_header("Content-Type", "text/html; charset=utf-8")
       self.end_headers()
-      self.wfile.write(b"Authorization finished. You may close this tab.")
-
-      done.set()
+      self.wfile.write(b"Waiting for OAuth redirect...")
 
     def log_message(self, format, *args):
       # アクセスログを抑制
@@ -147,11 +159,11 @@ def main():
         prompt="consent",
       )
 
-      print("Open this URL on your Mac browser:")
+      print("Open this URL in your browser:")
       print(auth_url)
       print(f"Waiting for redirect on 0.0.0.0:{redirect_port} ...")
 
-      # コンテナ側は 0.0.0.0 で待受（docker の port 公開で Mac->コンテナに届く）
+      # コンテナ側は 0.0.0.0 で待受（docker の port 公開でホスト->コンテナに届く）
       _code, _path = _receive_auth_code("0.0.0.0", redirect_port)
 
       # fetch_token は redirect_uri と整合する必要があるので localhost で組み立てる

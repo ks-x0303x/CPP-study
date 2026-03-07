@@ -6,9 +6,9 @@
 
 - `python3` が利用できること
 - 依存パッケージ（`pip`）
-	- `google-api-python-client`
-	- `google-auth-httplib2`
-	- `google-auth-oauthlib`
+  - `google-api-python-client`
+  - `google-auth-httplib2`
+  - `google-auth-oauthlib`
 
 ## 主要ファイル
 
@@ -103,95 +103,95 @@ flowchart LR
 
 ```mermaid
 sequenceDiagram
-	autonumber
-	participant User as User
-	participant Sh as auth_quickstart.sh
-	participant Py as quickstart.py
-	participant Browser as Browser
-	participant GoogleAuth as Google OAuth (Authorize)
-	participant Local as Local callback (localhost)
-	participant GoogleToken as Google OAuth (Token)
-	participant Token as token.json
+  autonumber
+  participant User as User
+  participant Sh as auth_quickstart.sh
+  participant Py as quickstart.py
+  participant Browser as Browser
+  participant GoogleAuth as Google OAuth (Authorize)
+  participant Local as Local callback (localhost)
+  participant GoogleToken as Google OAuth (Token)
+  participant Token as token.json
 
-	User->>Sh: 実行
-	Sh->>Sh: pip install/upgrade (依存解決)
-	Sh->>Py: OAUTHLIB_INSECURE_TRANSPORT=1 python3 quickstart.py
+  User->>Sh: 実行
+  Sh->>Sh: pip install/upgrade (依存解決)
+  Sh->>Py: OAUTHLIB_INSECURE_TRANSPORT=1 python3 quickstart.py
 
-	Py->>Py: credentials.json を読み込む
-	Py->>Browser: 認可URLを表示（ユーザーが開く）
-	User->>Browser: URLを開く
-	Browser->>GoogleAuth: ログイン/同意
-	GoogleAuth-->>Browser: redirect to http://localhost:PORT/?code=...&state=...
-	Browser->>Local: GET /?code=...&state=...
-	Local-->>Py: code/state を受領
+  Py->>Py: credentials.json を読み込む
+  Py->>Browser: 認可URLを表示（ユーザーが開く）
+  User->>Browser: URLを開く
+  Browser->>GoogleAuth: ログイン/同意
+  GoogleAuth-->>Browser: redirect to http://localhost:PORT/?code=...&state=...
+  Browser->>Local: GET /?code=...&state=...
+  Local-->>Py: code/state を受領
 
-	Py->>GoogleToken: code を token に交換
-	GoogleToken-->>Py: access_token/refresh_token
-	Py->>Token: token.json を上書き保存
-	Py-->>User: 認証完了
+  Py->>GoogleToken: code を token に交換
+  GoogleToken-->>Py: access_token/refresh_token
+  Py->>Token: token.json を上書き保存
+  Py-->>User: 認証完了
 ```
 
 ## シーケンス（ダウンロード）
 
 ```mermaid
 sequenceDiagram
-	autonumber
-	participant User as User
-	participant Sh as download_file.sh
-	participant Py as google_drive_driver.py
-	participant Token as token.json
-	participant Drive as Google Drive API v3
-	participant FS as Local filesystem
+  autonumber
+  participant User as User
+  participant Sh as download_file.sh
+  participant Py as google_drive_driver.py
+  participant Token as token.json
+  participant Drive as Google Drive API v3
+  participant FS as Local filesystem
 
-	User->>Sh: ./download_file.sh <drive_path_or_id> <output>
-	Sh->>Py: python3 google_drive_driver.py download ...
-	Py->>Token: token.json 読み込み
-	alt access token expired
-		Py->>Drive: Refresh (via OAuth)
-		Py->>Token: token.json 更新
-	end
+  User->>Sh: ./download_file.sh <drive_path_or_id> <output>
+  Sh->>Py: python3 google_drive_driver.py download ...
+  Py->>Token: token.json 読み込み
+  alt access token expired
+    Py->>Drive: Refresh (via OAuth)
+    Py->>Token: token.json 更新
+  end
 
-	alt 入力が「パス」（例: A/B/file.txt）
-		Py->>Drive: files.list (フォルダ/ファイル探索)
-		Drive-->>Py: fileId
-	else 入力が「ID」
-		Py->>Py: fileId = 入力
-	end
+  alt 入力が「パス」（例: A/B/file.txt）
+    Py->>Drive: files.list (フォルダ/ファイル探索)
+    Drive-->>Py: fileId
+  else 入力が「ID」
+    Py->>Py: fileId = 入力
+  end
 
-	Py->>Drive: files.get_media(fileId)
-	Drive-->>Py: file bytes (chunked)
-	Py->>FS: 指定先に保存
-	Py-->>User: 完了メッセージ
+  Py->>Drive: files.get_media(fileId)
+  Drive-->>Py: file bytes (chunked)
+  Py->>FS: 指定先に保存
+  Py-->>User: 完了メッセージ
 ```
 
 ## シーケンス（アップロード）
 
 ```mermaid
 sequenceDiagram
-	autonumber
-	participant User as User
-	participant Sh as upload_file.sh
-	participant Py as google_drive_driver.py
-	participant Token as token.json
-	participant Drive as Google Drive API v3
-	participant FS as Local filesystem
+  autonumber
+  participant User as User
+  participant Sh as upload_file.sh
+  participant Py as google_drive_driver.py
+  participant Token as token.json
+  participant Drive as Google Drive API v3
+  participant FS as Local filesystem
 
-	User->>Sh: ./upload_file.sh <local_file> <drive_folder_path>
-	Sh->>Py: python3 google_drive_driver.py upload ...
-	Py->>Token: token.json 読み込み
-	alt access token expired
-		Py->>Drive: Refresh (via OAuth)
-		Py->>Token: token.json 更新
-	end
+  User->>Sh: ./upload_file.sh <local_file> <drive_folder_path>
+  Sh->>Py: python3 google_drive_driver.py upload ...
+  Py->>Token: token.json 読み込み
+  alt access token expired
+    Py->>Drive: Refresh (via OAuth)
+    Py->>Token: token.json 更新
+  end
 
-	Py->>FS: ローカルファイル存在確認
-	Py->>Drive: files.list (フォルダ探索)
-	alt フォルダが存在しない
-		Py->>Drive: files.create (フォルダ作成)
-	end
+  Py->>FS: ローカルファイル存在確認
+  Py->>Drive: files.list (フォルダ探索)
+  alt フォルダが存在しない
+    Py->>Drive: files.create (フォルダ作成)
+  end
 
-	Py->>Drive: files.create + Media upload (ファイル作成/アップロード)
-	Drive-->>Py: uploaded fileId
-	Py-->>User: 完了メッセージ
+  Py->>Drive: files.create + Media upload (ファイル作成/アップロード)
+  Drive-->>Py: uploaded fileId
+  Py-->>User: 完了メッセージ
 ```
 

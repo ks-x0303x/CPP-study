@@ -1,5 +1,4 @@
 import argparse
-import os
 import fnmatch
 import glob
 import re
@@ -55,7 +54,8 @@ def _service():
 
 
 def _escape_query_value(value: str) -> str:
-    return value.replace("'", "\\'")
+    # Drive query uses single quotes; escape backslash first.
+    return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
 def _has_glob_magic(value: str) -> bool:
@@ -146,6 +146,8 @@ def _resolve_file_id(service, file_path_or_id: str) -> str:
             return file_path_or_id
 
         candidates = _find_files_in_root_by_name(service, file_path_or_id)
+        # フォルダは download できないので除外
+        candidates = [c for c in candidates if c.get("mimeType") != "application/vnd.google-apps.folder"]
         if len(candidates) == 1:
             return candidates[0]["id"]
         if len(candidates) > 1:
@@ -160,8 +162,10 @@ def _resolve_file_id(service, file_path_or_id: str) -> str:
                 f"name={file_path_or_id}\n{shown}"
             )
 
-        # root 直下に見つからない場合は「ID」として扱う（ユーザーが短いIDを渡した可能性を残す）
-        return file_path_or_id
+        raise FileNotFoundError(
+            "File not found in Drive root. Specify a Drive path like 'Folder/file.txt' or use the file ID.\n"
+            f"name={file_path_or_id}"
+        )
 
     drive_path = file_path_or_id.strip("/")
     parts = [p for p in drive_path.split("/") if p]
@@ -175,6 +179,8 @@ def _resolve_file_id(service, file_path_or_id: str) -> str:
     f = _find_child(service, parent_id, file_name, None)
     if not f:
         raise FileNotFoundError(f"File not found: {file_path_or_id}")
+    if f.get("mimeType") == "application/vnd.google-apps.folder":
+        raise IsADirectoryError(f"Path refers to a folder (cannot download a folder): {file_path_or_id}")
     return f["id"]
 
 
@@ -270,8 +276,7 @@ def download_file(src_file_path_or_id: str, output_path: str) -> None:
     except Exception as exc:
         # fileId として失敗した場合に、ありがちな誤用（ファイル名を渡した）をガイドする
         if (
-            isinstance(exc, Exception)
-            and hasattr(exc, "resp")
+            hasattr(exc, "resp")
             and getattr(getattr(exc, "resp", None), "status", None) == 404
             and "/" not in src_file_path_or_id
             and not _looks_like_file_id(src_file_path_or_id)
