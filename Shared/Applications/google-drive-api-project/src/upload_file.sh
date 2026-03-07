@@ -41,5 +41,17 @@ if [ ! -f "$FILE_PATH" ]; then
     exit 1
 fi
 
+CONFIG_DIR="/usr/local/config"
+if [[ ! -d "$CONFIG_DIR" ]]; then
+    CONFIG_DIR="$SCRIPT_DIR"
+fi
+
+if [[ ! -f "$CONFIG_DIR/token.json" ]]; then
+    echo "Error: token.json が見つかりません: $CONFIG_DIR/token.json"
+    echo "先に認証を通して token.json を生成してください:"
+    echo "  $SCRIPT_DIR/auth_quickstart.sh"
+    exit 2
+fi
+
 # Execute the Python script with the provided arguments
 python3 "$SCRIPT_DIR/google_drive_driver.py" upload -f "$FILE_PATH" -t "$TARGET_DIR"

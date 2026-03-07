@@ -5,9 +5,9 @@ services:
     image: ksx0303x/ubuntu-env:latest
     ports:
     # - "2222:22"
-      - "8080:80"
+      - "8080:8080"
       - "10000:10000" # gdb server
-    network_mode: host
+    #network_mode: host
     # networks:
     #   my_network:
     #     ipv4_address: 172.18.0.23
