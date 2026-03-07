@@ -3,6 +3,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+CONFIG_DIR="/usr/local/config"
+if [[ ! -f "$CONFIG_DIR/credentials.json" ]]; then
+  CONFIG_DIR="$(pwd)"
+fi
+
 REQ_PKGS=(
   google-api-python-client
   google-auth-httplib2
@@ -17,10 +22,11 @@ fi
 echo "[1/3] 依存パッケージをインストール/更新します..."
 python3 -m pip install --upgrade "${REQ_PKGS[@]}"
 
-if [[ ! -f "./credentials.json" ]]; then
+if [[ ! -f "$CONFIG_DIR/credentials.json" ]]; then
   echo
-  echo "Error: カレントディレクトリに credentials.json がありません。"
-  echo "Google Cloud Console で OAuth クライアント(デスクトップアプリ)を作成し、credentials.json をここに配置してください。"
+  echo "Error: credentials.json が見つかりません。"
+  echo "期待パス: $CONFIG_DIR/credentials.json"
+  echo "Google Cloud Console で OAuth クライアント(デスクトップアプリ)を作成し、credentials.json を配置してください。"
   echo
   echo "手順:"
   echo "https://developers.google.com/workspace/drive/api/quickstart/python?hl=ja#authorize_credentials_for_a_desktop_application"

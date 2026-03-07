@@ -1,5 +1,7 @@
 import argparse
 import os
+import fnmatch
+import glob
 import re
 from pathlib import Path
 
@@ -13,11 +15,19 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 _FILE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{20,}$")
+_GLOB_META_CHARS = set("*?[")
 
 
 def _get_config_dir() -> Path:
+    """Locate config directory.
+
+    Prefer `/usr/local/config` only when it actually contains `token.json`.
+    This avoids surprising failures when the directory exists but the config
+    files live next to the scripts.
+    """
+
     container_dir = Path("/usr/local/config")
-    if container_dir.is_dir():
+    if container_dir.is_dir() and (container_dir / "token.json").exists():
         return container_dir
     return Path(__file__).resolve().parent
 
@@ -48,6 +58,10 @@ def _escape_query_value(value: str) -> str:
     return value.replace("'", "\\'")
 
 
+def _has_glob_magic(value: str) -> bool:
+    return any(ch in value for ch in _GLOB_META_CHARS)
+
+
 def _looks_like_file_id(value: str) -> bool:
     return bool(_FILE_ID_RE.match(value))
 
@@ -76,6 +90,31 @@ def _find_child(service, parent_id: str, name: str, mime_type: str | None):
     resp = service.files().list(q=" and ".join(q_parts), fields="files(id,name,mimeType)").execute()
     files = resp.get("files", [])
     return files[0] if files else None
+
+
+def _list_children(service, parent_id: str, name_contains: str | None):
+    q_parts = [f"'{parent_id}' in parents", "trashed=false"]
+    if name_contains:
+        q_parts.append(f"name contains '{_escape_query_value(name_contains)}'")
+
+    files: list[dict] = []
+    page_token = None
+    while True:
+        resp = (
+            service.files()
+            .list(
+                q=" and ".join(q_parts),
+                fields="nextPageToken, files(id,name,mimeType,modifiedTime,size)",
+                pageSize=1000,
+                pageToken=page_token,
+            )
+            .execute()
+        )
+        files.extend(resp.get("files", []))
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return files
 
 
 def _resolve_folder_id(service, folder_path: str, create: bool) -> str:
@@ -147,18 +186,87 @@ def _resolve_output_path(src_file_path_or_id: str, output_path: str) -> Path:
     return out
 
 
+def _download_one(service, file_id: str, out: Path) -> None:
+    req = service.files().get_media(fileId=file_id)
+    with open(out, "wb") as fh:
+        downloader = MediaIoBaseDownload(fh, req)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+
+
+def _download_many(service, items: list[dict], output_path: str) -> None:
+    out_base = Path(output_path).expanduser().resolve()
+    if out_base.exists() and out_base.is_file():
+        raise ValueError(
+            "Output path must be a directory when downloading multiple files. "
+            f"output={out_base}"
+        )
+    out_base.mkdir(parents=True, exist_ok=True)
+
+    for item in items:
+        name = item.get("name") or item.get("id")
+        out = out_base / name
+        _download_one(service, item["id"], out)
+        print(f"Downloaded: {name} ({item['id']}) -> {out}")
+
+
+def _resolve_drive_glob(service, drive_path_glob: str) -> list[dict]:
+    """Resolve Drive-side glob for file names.
+
+    Supports glob only in the last path component (file name), e.g.:
+    - test.*
+    - Folder/*.txt
+    """
+
+    drive_path_glob = drive_path_glob.strip("/")
+    if drive_path_glob == "":
+        raise ValueError("Invalid file path")
+
+    if "/" in drive_path_glob:
+        folder_path, name_glob = drive_path_glob.rsplit("/", 1)
+        if _has_glob_magic(folder_path):
+            raise ValueError("Wildcards in folder path are not supported.")
+        parent_id = _resolve_folder_id(service, folder_path, create=False)
+    else:
+        name_glob = drive_path_glob
+        parent_id = "root"
+
+    prefix = ""
+    for ch in name_glob:
+        if ch in _GLOB_META_CHARS:
+            break
+        prefix += ch
+
+    candidates = _list_children(service, parent_id, prefix or None)
+
+    matched = [c for c in candidates if fnmatch.fnmatchcase(c.get("name", ""), name_glob)]
+    # フォルダは download できないので除外
+    matched = [m for m in matched if m.get("mimeType") != "application/vnd.google-apps.folder"]
+
+    return matched
+
+
 def download_file(src_file_path_or_id: str, output_path: str) -> None:
     service = _service()
-    file_id = _resolve_file_id(service, src_file_path_or_id)
-    out = _resolve_output_path(src_file_path_or_id, output_path)
-
-    req = service.files().get_media(fileId=file_id)
     try:
-        with open(out, "wb") as fh:
-            downloader = MediaIoBaseDownload(fh, req)
-            done = False
-            while not done:
-                _, done = downloader.next_chunk()
+        if _has_glob_magic(src_file_path_or_id):
+            items = _resolve_drive_glob(service, src_file_path_or_id)
+            if not items:
+                raise FileNotFoundError(f"No files matched: {src_file_path_or_id}")
+            if len(items) == 1:
+                name = items[0].get("name") or src_file_path_or_id
+                out = _resolve_output_path(name, output_path)
+                _download_one(service, items[0]["id"], out)
+                print(f"Downloaded: {name} ({items[0]['id']}) -> {out}")
+                return
+
+            _download_many(service, items, output_path)
+            return
+
+        file_id = _resolve_file_id(service, src_file_path_or_id)
+        out = _resolve_output_path(src_file_path_or_id, output_path)
+        _download_one(service, file_id, out)
     except Exception as exc:
         # fileId として失敗した場合に、ありがちな誤用（ファイル名を渡した）をガイドする
         if (
@@ -173,20 +281,36 @@ def download_file(src_file_path_or_id: str, output_path: str) -> None:
                 f"input={src_file_path_or_id}"
             ) from exc
         raise
+
     print(f"Downloaded: {src_file_path_or_id} -> {out}")
 
 
 def upload_file(local_file_path: str, target_folder: str) -> None:
     service = _service()
+    parent_id = _resolve_folder_id(service, target_folder, create=True)
+
+    def upload_one(local: Path) -> None:
+        media = MediaFileUpload(str(local), resumable=True)
+        meta = {"name": local.name, "parents": [parent_id]}
+        created = service.files().create(body=meta, media_body=media, fields="id").execute()
+        print(f"Uploaded: {local} -> {target_folder} (id={created['id']})")
+
+    if _has_glob_magic(local_file_path):
+        pattern = str(Path(local_file_path).expanduser())
+        matches = [Path(p) for p in glob.glob(pattern)]
+        matches = [p for p in matches if p.is_file()]
+        if not matches:
+            raise FileNotFoundError(f"Local files not found (glob): {pattern}")
+        for p in sorted({m.resolve() for m in matches}):
+            upload_one(p)
+        return
+
     local = Path(local_file_path).expanduser().resolve()
     if not local.exists():
         raise FileNotFoundError(f"Local file not found: {local}")
-
-    parent_id = _resolve_folder_id(service, target_folder, create=True)
-    media = MediaFileUpload(str(local), resumable=True)
-    meta = {"name": local.name, "parents": [parent_id]}
-    created = service.files().create(body=meta, media_body=media, fields="id").execute()
-    print(f"Uploaded: {local} -> {target_folder} (id={created['id']})")
+    if not local.is_file():
+        raise FileNotFoundError(f"Local file not found: {local}")
+    upload_one(local)
 
 
 def main():

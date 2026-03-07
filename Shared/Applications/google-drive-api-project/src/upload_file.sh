@@ -4,18 +4,19 @@
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
 function show_help() {
-    echo "Usage: $0 <file_path> <target_directory>"
+    echo "Usage: $0 <file_path...> <target_directory>"
     echo
-    echo "Upload a file to Google Drive."
+    echo "Upload one or more files to Google Drive."
     echo
     echo "Options:"
-    echo "  <file_path>         Path to the file to upload."
+    echo "  <file_path...>      One or more paths to the files to upload. (globs are OK)"
     echo "  <target_directory>  Target directory on Google Drive where the file will be uploaded."
     echo "  -h, --help          Show this help message and exit."
     echo
     echo "Examples:"
     echo "  $0 /path/to/file.txt MyDriveFolder"
     echo "  $0 ./example.txt BackupFolder"
+    echo "  $0 ./test* ./        # upload to Drive root"
 }
 
 # Check if help is requested
@@ -25,24 +26,33 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
 fi
 
 # Check if the correct number of arguments is provided
-if [ "$#" -ne 2 ]; then
+if [ "$#" -lt 2 ]; then
     echo "Error: Invalid number of arguments."
     echo "Use '$0 --help' for usage information."
     exit 1
 fi
 
 # Assign arguments to variables
-FILE_PATH=$1
-TARGET_DIR=$2
+TARGET_DIR="${@: -1}"
+FILE_PATHS=("${@:1:$#-1}")
 
-# Check if the file exists
-if [ ! -f "$FILE_PATH" ]; then
-    echo "Error: File '$FILE_PATH' does not exist."
-    exit 1
+# Normalize target for Drive root
+if [[ "$TARGET_DIR" == "." || "$TARGET_DIR" == "./" ]]; then
+    TARGET_DIR=""
 fi
 
+# Check if the file exists (except glob patterns; those are handled in python)
+for FILE_PATH in "${FILE_PATHS[@]}"; do
+    if [[ "$FILE_PATH" != *"*"* && "$FILE_PATH" != *"?"* && "$FILE_PATH" != *"["* ]]; then
+        if [ ! -f "$FILE_PATH" ]; then
+            echo "Error: File '$FILE_PATH' does not exist."
+            exit 1
+        fi
+    fi
+done
+
 CONFIG_DIR="/usr/local/config"
-if [[ ! -d "$CONFIG_DIR" ]]; then
+if [[ ! -f "$CONFIG_DIR/token.json" ]]; then
     CONFIG_DIR="$SCRIPT_DIR"
 fi
 
@@ -54,4 +64,6 @@ if [[ ! -f "$CONFIG_DIR/token.json" ]]; then
 fi
 
 # Execute the Python script with the provided arguments
-python3 "$SCRIPT_DIR/google_drive_driver.py" upload -f "$FILE_PATH" -t "$TARGET_DIR"
+for FILE_PATH in "${FILE_PATHS[@]}"; do
+    python3 "$SCRIPT_DIR/google_drive_driver.py" upload -f "$FILE_PATH" -t "$TARGET_DIR"
+done

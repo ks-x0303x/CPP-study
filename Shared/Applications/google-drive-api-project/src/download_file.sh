@@ -39,7 +39,7 @@ SRC_FILE_PATH_OR_ID=$1
 OUTPUT_PATH=$2
 
 CONFIG_DIR="/usr/local/config"
-if [[ ! -d "$CONFIG_DIR" ]]; then
+if [[ ! -f "$CONFIG_DIR/token.json" ]]; then
     CONFIG_DIR="$SCRIPT_DIR"
 fi
 

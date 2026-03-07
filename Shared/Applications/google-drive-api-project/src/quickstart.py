@@ -1,3 +1,4 @@
+import json
 import os.path
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -22,9 +23,40 @@ def _get_config_dir() -> Path:
   - Fallback: this script directory
   """
   container_dir = Path("/usr/local/config")
-  if container_dir.is_dir():
+  if container_dir.is_dir() and (
+    (container_dir / "credentials.json").exists() or (container_dir / "token.json").exists()
+  ):
     return container_dir
   return Path(__file__).resolve().parent
+
+
+def _validate_credentials_json(credentials_path: Path) -> None:
+  """Validate minimal structure of credentials.json without printing secrets."""
+  try:
+    raw = credentials_path.read_text(encoding="utf-8")
+    data = json.loads(raw)
+  except Exception as exc:
+    raise ValueError(f"credentials.json の JSON 形式が不正です: {credentials_path}") from exc
+
+  if isinstance(data, dict) and "installed" in data:
+    cfg = data.get("installed") or {}
+    kind = "installed"
+  elif isinstance(data, dict) and "web" in data:
+    cfg = data.get("web") or {}
+    kind = "web"
+  else:
+    raise ValueError(
+      "credentials.json の形式が想定外です。Google Cloud Console で OAuth クライアント(Desktop app)の JSON を再ダウンロードしてください。\n"
+      f"path: {credentials_path}"
+    )
+
+  required = ["client_id", "auth_uri", "token_uri"]
+  missing = [k for k in required if not cfg.get(k)]
+  if missing:
+    raise ValueError(
+      "credentials.json に必須フィールドがありません。OAuth クライアント(Desktop app)の JSON をそのまま配置してください。\n"
+      f"type: {kind}\nmissing: {', '.join(missing)}\npath: {credentials_path}"
+    )
 
 
 def _receive_auth_code(bind_host: str, bind_port: int):
@@ -91,6 +123,8 @@ def main():
       "https://developers.google.com/workspace/drive/api/quickstart/python?hl=ja#authorize_credentials_for_a_desktop_application\n"
     )
 
+  _validate_credentials_json(credentials_path)
+
   if token_path.exists():
     creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
 
@@ -121,7 +155,20 @@ def main():
       _code, _path = _receive_auth_code("0.0.0.0", redirect_port)
 
       # fetch_token は redirect_uri と整合する必要があるので localhost で組み立てる
-      flow.fetch_token(authorization_response=f"http://localhost:{redirect_port}{_path}")
+      try:
+        flow.fetch_token(authorization_response=f"http://localhost:{redirect_port}{_path}")
+      except Exception as exc:
+        # よくある: token 交換で invalid_client(Unauthorized)
+        # -> credentials.json の client_secret が違う/欠けている/別クライアントの JSON を置いている等
+        if exc.__class__.__name__ == "InvalidClientError":
+          raise RuntimeError(
+            "OAuth トークン交換に失敗しました: invalid_client (Unauthorized)\n"
+            "- /usr/local/config/credentials.json が正しい OAuth クライアント(Desktop app)の JSON か確認してください\n"
+            "- Cloud Console で OAuth クライアントを再作成/再ダウンロードした場合は、最新の credentials.json に差し替えてください\n"
+            "- credentials.json を差し替えた後、必要なら token.json を削除して再実行してください\n"
+            f"credentials: {credentials_path}"
+          ) from exc
+        raise
       creds = flow.credentials
 
     token_path.write_text(creds.to_json(), encoding="utf-8")
