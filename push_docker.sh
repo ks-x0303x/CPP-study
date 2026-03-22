@@ -44,9 +44,19 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         --platforms)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --platforms requires an argument." >&2
+                show_help
+                exit 2
+            fi
             PLATFORMS="$2"; shift 2
             ;;
         --builder)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --builder requires an argument." >&2
+                show_help
+                exit 2
+            fi
             BUILDER="$2"; shift 2
             ;;
         --install-binfmt)
