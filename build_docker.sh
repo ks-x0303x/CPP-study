@@ -34,6 +34,11 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         --image)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --image requires a value." >&2
+                show_help
+                exit 2
+            fi
             IMAGE="$2"; shift 2
             ;;
         --)
