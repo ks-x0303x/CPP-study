@@ -43,6 +43,11 @@ fi
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--tag-as)
+			if [[ $# -lt 2 ]]; then
+				echo "Error: --tag-as requires an argument." >&2
+				echo "Run with --help for usage." >&2
+				exit 2
+			fi
 			TAG_AS="$2"; shift 2
 			;;
 		--no-retag)
