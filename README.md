@@ -63,8 +63,6 @@ $ ./push_docker.sh 1.0 --install-binfmt
 ## クロスコンパイル
 コンテナ内で以下のコンパイラが利用できます（pull/run どちらで起動しても同じです）。
 
-コンテナ内で以下のコンパイラが利用できます。
-
 - ネイティブ: `gcc` / `g++`
 - aarch64 向け: `aarch64-linux-gnu-gcc` / `aarch64-linux-gnu-g++`
 - x86_64 向け: `x86_64-linux-gnu-gcc` / `x86_64-linux-gnu-g++`
