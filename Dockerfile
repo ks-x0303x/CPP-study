@@ -1,4 +1,3 @@
-# ベースイメージにUbuntuを使用 (ARM64対応)
 FROM ubuntu:22.04
 
 ENV HOME=/home/ubuntu
@@ -15,6 +14,12 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     gcc \
     g++ \
+    gcc-aarch64-linux-gnu \
+    g++-aarch64-linux-gnu \
+    binutils-aarch64-linux-gnu \
+    gcc-x86-64-linux-gnu \
+    g++-x86-64-linux-gnu \
+    binutils-x86-64-linux-gnu \
     gdb-multiarch \
     gdbserver \
     cmake \
@@ -42,11 +47,18 @@ RUN cd /home/ubuntu/Shared/external && \
     cd .. && \
     rm -rf boost_1_74_0 boost_1_74_0.tar.gz
 
-# Go言語のインストール (aarch64対応)
+# Go言語のインストール (実行環境のCPUに追従)
 ENV GO_VERSION=1.20.5
-RUN wget https://go.dev/dl/go$GO_VERSION.linux-arm64.tar.gz && \
-    tar -C /usr/local -xzf go$GO_VERSION.linux-arm64.tar.gz && \
-    rm go$GO_VERSION.linux-arm64.tar.gz
+RUN set -eu; \
+    dpkg_arch="$(dpkg --print-architecture)"; \
+    case "${dpkg_arch}" in \
+        amd64) go_arch="amd64" ;; \
+        arm64) go_arch="arm64" ;; \
+        *) echo "Unsupported architecture: ${dpkg_arch}"; exit 1 ;; \
+    esac; \
+    wget "https://go.dev/dl/go${GO_VERSION}.linux-${go_arch}.tar.gz" && \
+    tar -C /usr/local -xzf "go${GO_VERSION}.linux-${go_arch}.tar.gz" && \
+    rm "go${GO_VERSION}.linux-${go_arch}.tar.gz"
 
 # Goの環境変数を設定
 ENV GOROOT=/usr/local/go

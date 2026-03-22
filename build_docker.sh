@@ -1,28 +1,66 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-function show_help() {
-    echo "Usage: $0 [TAG]"
-    echo
-    echo "Build a Docker image with the specified tag."
-    echo "If no tag is provided, 'latest' will be used as the default."
-    echo
-    echo "Options:"
-    echo "  TAG       Specify the tag for the Docker image (e.g., 1.0, 0.02)."
-    echo "  -h, --help  Show this help message and exit."
+set -euo pipefail
+
+show_help() {
+    cat << 'EOF'
+Usage:
+    ./build_docker.sh [TAG] [PLATFORM]
+
+Examples:
+  ./build_docker.sh
+  ./build_docker.sh 1.0
+  ./build_docker.sh 1.0 linux/amd64
+
+Options:
+    --image <name>         Image name (default: ubuntu-env)
+  -h, --help             Show help
+
+Notes:
+    - This script only builds locally.
+    - For pushing (single-arch / multi-arch), use ./push_docker.sh.
+EOF
 }
 
-# Check if help is requested
-if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    show_help
-    exit 0
+TAG="latest"
+PLATFORM=""
+IMAGE="ubuntu-env"
+
+positional=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        --image)
+            IMAGE="$2"; shift 2
+            ;;
+        --)
+            shift
+            while [[ $# -gt 0 ]]; do positional+=("$1"); shift; done
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            echo "Run with --help for usage." >&2
+            exit 2
+            ;;
+        *)
+            positional+=("$1"); shift
+            ;;
+    esac
+done
+
+if [[ ${#positional[@]} -ge 1 ]]; then
+    TAG="${positional[0]}"
+fi
+if [[ ${#positional[@]} -ge 2 ]]; then
+    PLATFORM="${positional[1]}"
 fi
 
-# Check if a tag is provided as an argument
-if [ -z "$1" ]; then
-    TAG="latest"
+# Local build (classic docker build)
+if [[ -n "${PLATFORM}" ]]; then
+    docker build -t "${IMAGE}:${TAG}" --platform "${PLATFORM}" -f Dockerfile .
 else
-    TAG="$1"
+    docker build -t "${IMAGE}:${TAG}" -f Dockerfile .
 fi
-
-# Build the Docker image with the specified or default tag
-docker build -t ubuntu-env:$TAG --platform linux/arm64 -f Dockerfile .
