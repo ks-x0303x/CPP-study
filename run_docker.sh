@@ -1,5 +1,9 @@
 #!/bin/bash
 
+set -euo pipefail
+
+COMPOSE_FILE="docker-compose.yml"
+
 function show_help() {
     echo "Usage: $0 [COMPOSE_FILE]"
     echo
@@ -11,23 +15,39 @@ function show_help() {
     echo "  -h, --help    Show this help message and exit."
 }
 
-# Check if help is requested
-if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    show_help
-    exit 0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            echo "Run with --help for usage." >&2
+            exit 2
+            ;;
+        *)
+            COMPOSE_FILE="$1"; shift
+            ;;
+    esac
+done
+
+compose() {
+    if docker compose version >/dev/null 2>&1; then
+        docker compose "$@"
+    else
+        docker-compose "$@"
+    fi
+}
+
+# Colima がある環境では起動状態を確認 (主に macOS)
+if command -v colima >/dev/null 2>&1; then
+    STATUS=$(colima status | grep -i "status" | awk '{print $2}' || true)
+    if [ "${STATUS}" != "running" ]; then
+        echo "Colima is not running. Starting Colima..."
+        colima start
+    fi
 fi
-
-# Colima の状態を確認
-STATUS=$(colima status | grep -i "status" | awk '{print $2}')
-
-# 状態が "running" でない場合に Colima を起動
-if [ "$STATUS" != "running" ]; then
-    echo "Colima is not running. Starting Colima..."
-    colima start
-fi
-
-# 引数で docker-compose ファイルを指定（デフォルトは docker-compose.yml）
-COMPOSE_FILE=${1:-docker-compose.yml}
 
 # 指定された docker-compose ファイルが存在するか確認
 if [ ! -f "$COMPOSE_FILE" ]; then
@@ -36,6 +56,6 @@ if [ ! -f "$COMPOSE_FILE" ]; then
 fi
 
 # Docker Compose を起動
-docker-compose -f "$COMPOSE_FILE" run --rm --service-ports ubuntu-env bash
+compose -f "$COMPOSE_FILE" run --rm --service-ports ubuntu-env bash
 # docker exec -it cpp-study-ubuntu-env-1 /bin/bash
 # docker compose run --rm --service-ports ubuntu-env bash
