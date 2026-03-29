@@ -15,7 +15,15 @@ jobs:
       - name: Pull build image (amd64)
         run: bash ./pull_docker.sh latest --platform linux/amd64 --no-retag
 
-      - name: Build & test google-test-app
+      - name: Build:google-test-app
+        uses: ./.github/actions/ubuntu-env-exec
+        with:
+          image: ksx0303x/ubuntu-env:latest
+          command: >-
+            cd /home/ubuntu/Shared/Applications/google-test-app
+            && bash ./build.sh
+
+      - name: Test:google-test-app
         uses: ./.github/actions/ubuntu-env-exec
         with:
           image: ksx0303x/ubuntu-env:latest
