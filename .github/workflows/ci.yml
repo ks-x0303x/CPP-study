@@ -13,7 +13,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Pull build image (amd64)
-        run: docker pull ksx0303x/ubuntu-env:latest
+        run: bash ./pull_docker.sh latest --platform linux/amd64 --no-retag
 
       - name: Build & test google-test-app
         run: |
