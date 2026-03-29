@@ -3,6 +3,8 @@ name: ci
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '0 * * * *'
 
 env:
   DEFAULT_IMAGE: ksx0303x/ubuntu-env:latest
