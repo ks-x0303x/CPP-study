@@ -90,16 +90,19 @@ jobs:
           if [[ -z "$platform" ]]; then platform="$DEFAULT_PLATFORM"; fi
           if [[ -z "$workdir" ]]; then workdir="/home/ubuntu/Shared/Applications/$app"; fi
 
+          delim_build="BUILD_EOF_$(date +%s%N)"
+          delim_test="TEST_EOF_$(date +%s%N)"
+
           {
             echo "image=$image"
             echo "platform=$platform"
             echo "workdir=$workdir"
-            echo "build<<'EOF'"
+            echo "build<<$delim_build"
             echo "$build_cmd"
-            echo "EOF"
-            echo "test<<'EOF'"
+            echo "$delim_build"
+            echo "test<<$delim_test"
             echo "$test_cmd"
-            echo "EOF"
+            echo "$delim_test"
           } >> "$GITHUB_OUTPUT"
 
       - name: Pull image
@@ -168,13 +171,15 @@ jobs:
           if [[ -z "$platform" ]]; then platform="$DEFAULT_PLATFORM"; fi
           if [[ -z "$workdir" ]]; then workdir="/home/ubuntu/Shared/Applications/$app"; fi
 
+          delim_test="TEST_EOF_$(date +%s%N)"
+
           {
             echo "image=$image"
             echo "platform=$platform"
             echo "workdir=$workdir"
-            echo "test<<'EOF'"
+            echo "test<<$delim_test"
             echo "$test_cmd"
-            echo "EOF"
+            echo "$delim_test"
           } >> "$GITHUB_OUTPUT"
 
       - name: Pull image
