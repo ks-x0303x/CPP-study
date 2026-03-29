@@ -34,9 +34,23 @@ RUN apt-get update && apt-get install -y \
     cpio \
     pkg-config \
     libboost-all-dev \
+        libgtest-dev \
+        libgmock-dev \
     ninja-build && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# GoogleTest (Ubuntuではヘッダ/ソースのみの場合があるため、確実にリンクできるようビルドしてインストール)
+RUN set -eux; \
+        if [ -d /usr/src/googletest ]; then src_dir=/usr/src/googletest; \
+        elif [ -d /usr/src/gtest ]; then src_dir=/usr/src/gtest; \
+        else echo "googletest source dir not found under /usr/src"; exit 1; fi; \
+        cmake -S "${src_dir}" -B /tmp/googletest-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON; \
+        cmake --build /tmp/googletest-build -j"$(nproc)"; \
+        cmake --install /tmp/googletest-build; \
+        rm -rf /tmp/googletest-build
 
 # Boost 1.74 (Ubuntu 22.04 のパッケージ) は apt で導入する
 

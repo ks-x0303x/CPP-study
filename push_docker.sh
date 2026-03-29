@@ -26,6 +26,7 @@ Notes:
   - Requires: docker login (Docker Hub)
     - This script builds and pushes a multi-arch image (manifest list).
     - Push requires permission to the Docker Hub repo: ksx0303x/ubuntu-env.
+        - If TAG looks like a version (e.g. 1.1), this script also tags/pushes the same image as :latest.
         - Note: buildx with --push does NOT leave a tagged image in `docker images`.
             (To see it locally, `docker pull ksx0303x/ubuntu-env:<TAG>` or use ./build_docker.sh.)
 EOF
@@ -85,13 +86,24 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+TAG_LATEST="false"
+if [[ "${TAG}" != "latest" ]]; then
+    # Only move :latest when pushing a version-like tag.
+    if [[ "${TAG}" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+        TAG_LATEST="true"
+    fi
+fi
 
 if ! docker buildx version >/dev/null 2>&1; then
     echo "Error: docker buildx is not available in this Docker installation." >&2
     exit 1
 fi
 
-echo "Pushing multi-arch image: ${REPO}:${TAG}" >&2
+if [[ "${TAG_LATEST}" == "true" ]]; then
+    echo "Pushing multi-arch image: ${REPO}:${TAG} (and tagging as ${REPO}:latest)" >&2
+else
+    echo "Pushing multi-arch image: ${REPO}:${TAG}" >&2
+fi
 echo "  platforms: ${PLATFORMS}" >&2
 echo "  builder:   ${BUILDER}" >&2
 echo "  progress:  ${PROGRESS}" >&2
@@ -124,6 +136,10 @@ buildx_args=(
     --push
 )
 
+if [[ "${TAG_LATEST}" == "true" ]]; then
+    buildx_args+=( -t "${REPO}:latest" )
+fi
+
 buildx_args+=(--platform "${PLATFORMS}")
 buildx_args+=(--progress "${PROGRESS}")
 
@@ -131,6 +147,13 @@ docker buildx build "${buildx_args[@]}" "${SCRIPT_DIR}"
 
 cat >&2 <<EOF
 Done: pushed ${REPO}:${TAG}
+EOF
+
+if [[ "${TAG_LATEST}" == "true" ]]; then
+    echo "Also tagged/pushed: ${REPO}:latest" >&2
+fi
+
+cat >&2 <<EOF
 
 Note:
     - buildx --push does not keep a local image tag.
