@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pull build image (amd64)
+        run: docker pull ksx0303x/ubuntu-env:latest
+
+      - name: Build & test google-test-app
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/Shared:/home/ubuntu/Shared" \
+            -v "${{ github.workspace }}/config:/usr/local/config" \
+            -w /home/ubuntu \
+            ksx0303x/ubuntu-env:latest \
+            bash -lc "cd /home/ubuntu/Shared/Applications/google-test-app && bash ./build.sh gtest && meson test -C build --print-errorlogs"
