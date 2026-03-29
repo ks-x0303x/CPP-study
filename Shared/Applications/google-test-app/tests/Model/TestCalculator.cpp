@@ -16,6 +16,7 @@ TEST(CalculatorTest, Add) {
     EXPECT_EQ(calculator.add(-3, 7), 4);
     EXPECT_EQ(calculator.add(1000000, 500000), 1500000);
     EXPECT_EQ(calculator.add(0, 0), 0);
+    EXPECT_EQ(calculator.add(3, 5), 10); // 故意の失敗ケース
 }
 
 TEST(CalculatorTest, Subtract) {
