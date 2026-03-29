@@ -1,0 +1,8 @@
+# Application CI definition (consumed by .github/workflows/ci.yml)
+# Notes:
+# - Keep this file simple: top-level `key: value` lines only.
+# - Defaults are provided by the top-level workflow.
+# - You can optionally override: image/platform/workdir.
+# - `build:` and `test:` must be single-line commands (use `&&` to chain).
+build: bash ./build.sh
+test: bash ./build.sh gtest && meson test -C build --print-errorlogs

@@ -1,10 +1,14 @@
 name: "ubuntu-env exec"
-description: "Run a command inside the ubuntu-env Docker image with the repo's standard mounts"
+description: "Run a command inside a Docker image with the repo's standard mounts"
 
 inputs:
   image:
     description: "Docker image reference (e.g., ksx0303x/ubuntu-env:latest)"
     required: true
+  workdir:
+    description: "Container working directory passed to docker run -w"
+    required: false
+    default: "/home/ubuntu"
   command:
     description: "Command string executed by bash -lc inside the container"
     required: true
@@ -16,6 +20,7 @@ runs:
       shell: bash
       env:
         IMAGE: ${{ inputs.image }}
+        WORKDIR: ${{ inputs.workdir }}
         COMMAND: ${{ inputs.command }}
       run: |
         set -euo pipefail
@@ -23,6 +28,6 @@ runs:
         docker run --rm \
           -v "$GITHUB_WORKSPACE/Shared:/home/ubuntu/Shared" \
           -v "$GITHUB_WORKSPACE/config:/usr/local/config" \
-          -w /home/ubuntu \
+          -w "$WORKDIR" \
           "$IMAGE" \
           bash -lc "$COMMAND"

@@ -4,30 +4,196 @@ on:
   push:
   pull_request:
 
+env:
+  DEFAULT_IMAGE: ksx0303x/ubuntu-env:latest
+  DEFAULT_PLATFORM: linux/amd64
+
 jobs:
-  build:
+  discover:
     runs-on: ubuntu-latest
+
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Pull build image (amd64)
-        run: bash ./pull_docker.sh latest --platform linux/amd64 --no-retag
+      - name: Discover application CI configs
+        id: discover
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      - name: Build:google-test-app
+          python3 - << 'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path("Shared/Applications")
+          configs = sorted(root.glob("*/.github/ci.yml"))
+          if not configs:
+              raise SystemExit(
+                  "Error: no application CI configs found. Expected: Shared/Applications/<app>/.github/ci.yml"
+              )
+
+          include = []
+          for cfg in configs:
+              app = cfg.parts[2]  # Shared/Applications/<app>/...
+              include.append({"app": app, "config": str(cfg)})
+
+          print("matrix=" + json.dumps({"include": include}))
+          PY
+
+  app-ci:
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+
+    name: AppBuild:${{ matrix.app }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read app CI config
+        id: cfg
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cfg_file='${{ matrix.config }}'
+          app='${{ matrix.app }}'
+          if [[ ! -f "$cfg_file" ]]; then
+            echo "Config not found: $cfg_file" >&2
+            exit 1
+          fi
+
+          get_value() {
+            local key="$1"
+            sed -n -E "s/^${key}:[[:space:]]*//p" "$cfg_file" | head -n 1
+          }
+
+          image="$(get_value image)"
+          platform="$(get_value platform)"
+          workdir="$(get_value workdir)"
+          build_cmd="$(get_value build)"
+          test_cmd="$(get_value test)"
+
+          if [[ -z "$build_cmd" || -z "$test_cmd" ]]; then
+            echo "Invalid config (need build, test): $cfg_file" >&2
+            exit 2
+          fi
+          if [[ -z "$image" ]]; then image="$DEFAULT_IMAGE"; fi
+          if [[ -z "$platform" ]]; then platform="$DEFAULT_PLATFORM"; fi
+          if [[ -z "$workdir" ]]; then workdir="/home/ubuntu/Shared/Applications/$app"; fi
+
+          {
+            echo "image=$image"
+            echo "platform=$platform"
+            echo "workdir=$workdir"
+            echo "build<<'EOF'"
+            echo "$build_cmd"
+            echo "EOF"
+            echo "test<<'EOF'"
+            echo "$test_cmd"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Pull image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='${{ steps.cfg.outputs.image }}'
+          platform='${{ steps.cfg.outputs.platform }}'
+
+          if [[ "$image" == ksx0303x/ubuntu-env:* ]]; then
+            tag="${image#ksx0303x/ubuntu-env:}"
+            bash ./pull_docker.sh "$tag" --platform "$platform" --no-retag
+          else
+            docker pull --platform "$platform" "$image"
+          fi
+
+      - name: AppBuild:${{ matrix.app }}
         uses: ./.github/actions/ubuntu-env-exec
         with:
-          image: ksx0303x/ubuntu-env:latest
-          command: >-
-            cd /home/ubuntu/Shared/Applications/google-test-app
-            && bash ./build.sh
+          image: ${{ steps.cfg.outputs.image }}
+          workdir: ${{ steps.cfg.outputs.workdir }}
+          command: ${{ steps.cfg.outputs.build }}
 
-      - name: Test:google-test-app
+  app-test:
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+
+    name: Test:${{ matrix.app }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read app CI config
+        id: cfg
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cfg_file='${{ matrix.config }}'
+          app='${{ matrix.app }}'
+          if [[ ! -f "$cfg_file" ]]; then
+            echo "Config not found: $cfg_file" >&2
+            exit 1
+          fi
+
+          get_value() {
+            local key="$1"
+            sed -n -E "s/^${key}:[[:space:]]*//p" "$cfg_file" | head -n 1
+          }
+
+          image="$(get_value image)"
+          platform="$(get_value platform)"
+          workdir="$(get_value workdir)"
+          build_cmd="$(get_value build)"
+          test_cmd="$(get_value test)"
+
+          if [[ -z "$build_cmd" || -z "$test_cmd" ]]; then
+            echo "Invalid config (need build, test): $cfg_file" >&2
+            exit 2
+          fi
+          if [[ -z "$image" ]]; then image="$DEFAULT_IMAGE"; fi
+          if [[ -z "$platform" ]]; then platform="$DEFAULT_PLATFORM"; fi
+          if [[ -z "$workdir" ]]; then workdir="/home/ubuntu/Shared/Applications/$app"; fi
+
+          {
+            echo "image=$image"
+            echo "platform=$platform"
+            echo "workdir=$workdir"
+            echo "test<<'EOF'"
+            echo "$test_cmd"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Pull image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='${{ steps.cfg.outputs.image }}'
+          platform='${{ steps.cfg.outputs.platform }}'
+
+          if [[ "$image" == ksx0303x/ubuntu-env:* ]]; then
+            tag="${image#ksx0303x/ubuntu-env:}"
+            bash ./pull_docker.sh "$tag" --platform "$platform" --no-retag
+          else
+            docker pull --platform "$platform" "$image"
+          fi
+
+      - name: Test:${{ matrix.app }}
         uses: ./.github/actions/ubuntu-env-exec
         with:
-          image: ksx0303x/ubuntu-env:latest
-          command: >-
-            cd /home/ubuntu/Shared/Applications/google-test-app
-            && bash ./build.sh gtest
-            && meson test -C build --print-errorlogs
+          image: ${{ steps.cfg.outputs.image }}
+          workdir: ${{ steps.cfg.outputs.workdir }}
+          command: ${{ steps.cfg.outputs.test }}
