@@ -1,0 +1,28 @@
+name: "ubuntu-env exec"
+description: "Run a command inside the ubuntu-env Docker image with the repo's standard mounts"
+
+inputs:
+  image:
+    description: "Docker image reference (e.g., ksx0303x/ubuntu-env:latest)"
+    required: true
+  command:
+    description: "Command string executed by bash -lc inside the container"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run in container
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        COMMAND: ${{ inputs.command }}
+      run: |
+        set -euo pipefail
+
+        docker run --rm \
+          -v "$GITHUB_WORKSPACE/Shared:/home/ubuntu/Shared" \
+          -v "$GITHUB_WORKSPACE/config:/usr/local/config" \
+          -w /home/ubuntu \
+          "$IMAGE" \
+          bash -lc "$COMMAND"

@@ -16,10 +16,10 @@ jobs:
         run: bash ./pull_docker.sh latest --platform linux/amd64 --no-retag
 
       - name: Build & test google-test-app
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}/Shared:/home/ubuntu/Shared" \
-            -v "${{ github.workspace }}/config:/usr/local/config" \
-            -w /home/ubuntu \
-            ksx0303x/ubuntu-env:latest \
-            bash -lc "cd /home/ubuntu/Shared/Applications/google-test-app && bash ./build.sh gtest && meson test -C build --print-errorlogs"
+        uses: ./.github/actions/ubuntu-env-exec
+        with:
+          image: ksx0303x/ubuntu-env:latest
+          command: >-
+            cd /home/ubuntu/Shared/Applications/google-test-app
+            && bash ./build.sh gtest
+            && meson test -C build --print-errorlogs
