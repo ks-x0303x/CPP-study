@@ -33,19 +33,12 @@ RUN apt-get update && apt-get install -y \
     rpm2cpio \
     cpio \
     pkg-config \
+    libboost-all-dev \
     ninja-build && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Boost 1.74のインストール
-RUN cd /home/ubuntu/Shared/external && \
-    wget https://archives.boost.io/release/1.74.0/source/boost_1_74_0.tar.gz && \
-    tar -xvzf boost_1_74_0.tar.gz && \
-    cd boost_1_74_0 && \
-    ./bootstrap.sh && \
-    ./b2 install && \
-    cd .. && \
-    rm -rf boost_1_74_0 boost_1_74_0.tar.gz
+# Boost 1.74 (Ubuntu 22.04 のパッケージ) は apt で導入する
 
 # Go言語のインストール (実行環境のCPUに追従)
 ENV GO_VERSION=1.20.5

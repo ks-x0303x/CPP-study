@@ -37,12 +37,15 @@ if is_gtest
   #test_include_dirs = [gtest_include, gmock_include]
 
   # テストターゲットを作成
-  executable('test_runner',
+  test_runner = executable('test_runner',
       src + test_src,
       include_directories: [include_dirs, test_include_dirs, gtest_include, gmock_include],  # ヘッダーファイルのディレクトリを配列で指定
       dependencies: [gtest_dep, gmock_dep, boost_dep],  # 外部ライブラリを依存関係として指定
       cpp_args: ['-pthread']
   )
+
+  # テスト実行設定
+  test('unittests', test_runner)
 else
   executable('sample_app',
       ['main.cpp'] + src,
@@ -51,10 +54,4 @@ else
       cpp_args: ['-pthread']
   )
 endif
-
-
-
-
-# テスト実行設定
-#test('unittests', executable('test_runner'))
 

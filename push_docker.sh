@@ -17,6 +17,7 @@ Examples:
 Options:
     --platforms <list>     Platforms list (default: linux/amd64,linux/arm64)
   --builder <name>       Buildx builder name (default: cpp-study-builder)
+        --progress <mode>      Build progress output: auto|plain|tty (default: auto)
     --install-binfmt       Install binfmt/QEMU handlers (needs privileged Docker)
   -h, --help             Show help
 
@@ -35,6 +36,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TAG="latest"
 PLATFORMS="linux/amd64,linux/arm64"
 BUILDER="cpp-study-builder"
+PROGRESS="auto"
 INSTALL_BINFMT="false"
 
 while [[ $# -gt 0 ]]; do
@@ -59,6 +61,17 @@ while [[ $# -gt 0 ]]; do
             fi
             BUILDER="$2"; shift 2
             ;;
+        --progress)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --progress requires an argument." >&2
+                show_help
+                exit 2
+            fi
+            PROGRESS="$2"; shift 2
+            ;;
+        --progress=*)
+            PROGRESS="${1#*=}"; shift
+            ;;
         --install-binfmt)
             INSTALL_BINFMT="true"; shift
             ;;
@@ -81,6 +94,7 @@ fi
 echo "Pushing multi-arch image: ${REPO}:${TAG}" >&2
 echo "  platforms: ${PLATFORMS}" >&2
 echo "  builder:   ${BUILDER}" >&2
+echo "  progress:  ${PROGRESS}" >&2
 
 if [[ "${INSTALL_BINFMT}" == "true" ]]; then
     if ! docker run --privileged --rm tonistiigi/binfmt --install all >/dev/null; then
@@ -111,6 +125,7 @@ buildx_args=(
 )
 
 buildx_args+=(--platform "${PLATFORMS}")
+buildx_args+=(--progress "${PROGRESS}")
 
 docker buildx build "${buildx_args[@]}" "${SCRIPT_DIR}"
 
