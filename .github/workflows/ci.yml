@@ -7,6 +7,7 @@ on:
 env:
   DEFAULT_IMAGE: ksx0303x/ubuntu-env:latest
   DEFAULT_PLATFORM: linux/amd64
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   discover:
